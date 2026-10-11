@@ -5,6 +5,7 @@ on:
     - cron: '0 20 * * *'
   workflow_dispatch:
 
+# 必须明确赋予工作流写入权限，否则推送会被系统拒绝
 permissions:
   contents: write
 
@@ -15,6 +16,9 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          # 必须设为 0，拉取完整的历史记录，否则无法成功 rebase 合并
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,12 +28,30 @@ jobs:
       - name: Run Script
         run: python main.py
 
-      # 不使用 git push，直接发布为 Release 资产，彻底避免任何分支冲突与被拒
-      - name: Upload Rules to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: "Latest Merged Rules"
-          files: rules.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and Push
+        run: |
+          # 1. 声明机器人身份
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 2. 提取当前分支名（自动识别是 main 还是 master）
+          BRANCH=${GITHUB_REF##*/}
+
+          # 3. 关键修复：强制检出真实分支（彻底解除 Actions 默认的游离 HEAD 状态）
+          git checkout $BRANCH
+
+          # 4. 追踪并添加生成的规则文件
+          git add rules.txt
+
+          # 5. 检查变动并提交
+          if git diff --staged --quiet; then
+            echo "规则无变动，跳过推送"
+          else
+            git commit -m "Auto update rules [$(date -u +'%Y-%m-%d %H:%M:%S')]"
+            
+            # 6. 核心动作：强制拉取你在网页端的所有最新修改，并自动变基（把机器人的提交排在最后）
+            git pull origin $BRANCH --rebase
+            
+            # 7. 安全推送到远端
+            git push origin $BRANCH
+          fi
