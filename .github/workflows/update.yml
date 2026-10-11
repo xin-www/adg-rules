@@ -5,6 +5,7 @@ on:
     - cron: '0 20 * * *'
   workflow_dispatch:
 
+
 permissions:
   contents: write
 
@@ -15,6 +16,9 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,20 +28,8 @@ jobs:
       - name: Run Script
         run: python main.py
 
-      - name: Force Deploy to Rules Branch
-        run: |
-
-          mkdir -p deploy
-          mv rules.txt deploy/
-          cd deploy
-          
-          git init
-          git checkout -b rules
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add rules.txt
-          git commit -m "Auto update rules [$(date -u +'%Y-%m-%d %H:%M:%S')]"
-          
-          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" rules:rules
+      - name: Auto Commit and Push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto update rules"
+          file_pattern: "rules.txt"
