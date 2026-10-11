@@ -1,5 +1,5 @@
 ! Title: Personal Merged AdGuard Rules
-! Last Modified: 2026-10-11 15:48:54 UTC
+! Last Modified: 2026-10-11 15:49:53 UTC
 ! Total Count: 312692
 !
 ||*.exaapi.com^
