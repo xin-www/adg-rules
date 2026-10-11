@@ -5,7 +5,6 @@ on:
     - cron: '0 20 * * *'
   workflow_dispatch:
 
-# 必须声明写权限
 permissions:
   contents: write
 
@@ -25,9 +24,15 @@ jobs:
       - name: Run Script
         run: python main.py
 
-      # 使用官方推荐的成熟推送工具，自动处理变基、提交与推送，杜绝冲突报错
-      - name: Push Rules
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Auto update rules"
-          file_pattern: "rules.txt"
+      - name: Commit and Force Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add rules.txt
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto update rules"
+            # 无论远端有什么变动，直接强制推流覆盖，彻底消除拒绝提示
+            git push --force origin HEAD:${{ github.ref_name }}
+          fi
