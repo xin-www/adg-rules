@@ -3,22 +3,16 @@ import urllib.request
 from datetime import datetime
 
 RULE_URLS = [
-    # 基础全能拦截
     "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
-    # 国内应用开屏与移动端
     "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/AWAvenue-Ads-Rule.txt",
-    # 封堵 HTTPDNS
     "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/AdGuard/HTTPDNS/HTTPDNS.txt",
-    # 防追踪、遥测、报错、社交打点 (Filter 3)
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_3.txt",
-    # Cookie横幅、弹窗通知、烦人元素 (Filter 4)
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_4.txt",
 ]
 
 OUTPUT_FILE = "rules.txt"
 
-# 放宽的域名校验：允许标准域名，也兼容通配符
 DOMAIN_PATTERN = re.compile(
     r"^(?:\*\.)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-_]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
 )
@@ -33,25 +27,11 @@ def fetch_rules(url):
         print(f"Failed to fetch {url}: {e}")
         return []
 
-def extract_domain(line):
-    line = line.strip()
-    if not line or line.startswith(("!", "#", "[", ";", "/*", "*", "</", "<!", "<html")):
-        return None
-
-    # 去掉尾部注释
-    for sep in [" #", " !"]:
-        if sep in line:
-            line = line.split(sep)[0].strip()
-
-    # 去掉 AdGuard 修饰符 (如 $third-party, $image, $popup 等)
-    if "$" in line:
-        line = line.split("$")[0].strip()
-
+def extract_pure_domain(line):
+    """只提取最普通的域名，遇到白名单或修饰符直接返回 None，交给外部原样保留"""
     # 处理 Adblock 语法: ||domain^
     if line.startswith("||"):
-        # 去掉开头的 ||
         line = line[2:]
-        # 去掉分隔符及后面的路径 (例如 ||domain.com/path^ 或 ||domain.com^)
         for delim in ["^", "/", ":"]:
             if delim in line:
                 line = line.split(delim)[0]
@@ -74,29 +54,88 @@ def extract_domain(line):
 
     return None
 
+def optimize_domains(domains):
+    """对纯净的拦截域名进行父子覆盖去重"""
+    optimized = set()
+    for domain in domains:
+        clean_domain = domain[2:] if domain.startswith("*.") else domain
+        parts = clean_domain.split('.')
+        is_covered = False
+        
+        for i in range(1, len(parts) - 1):
+            parent_domain = '.'.join(parts[i:])
+            if parent_domain in domains or f"*.{parent_domain}" in domains:
+                is_covered = True
+                break
+                
+        if not is_covered:
+            optimized.add(domain)
+    return optimized
+
 def main():
-    unique_domains = set()
+    whitelists = set()       # 存放 @@ 白名单
+    modifier_rules = set()   # 存放带 $ 的修饰符规则
+    pure_domains = set()     # 存放需要去重的纯域名
 
     for url in RULE_URLS:
         lines = fetch_rules(url)
         for line in lines:
-            domain = extract_domain(line)
-            if domain:
-                unique_domains.add(domain)
+            line = line.strip()
+            # 过滤空行和注释
+            if not line or line.startswith(("!", "#", "[", ";", "/*", "*", "</", "<!", "<html")):
+                continue
+            
+            # 去除行尾注释
+            for sep in [" #", " !"]:
+                if sep in line:
+                    line = line.split(sep)[0].strip()
 
-    # 排序输出标准 AdGuard 语法
-    sorted_domains = sorted(unique_domains)
+            # 1. 优先提取并原样保留白名单 (防止误杀)
+            if line.startswith("@@"):
+                whitelists.add(line)
+                continue
+            
+            # 2. 提取并原样保留带修饰符的高级规则 (防止破坏规则逻辑)
+            if "$" in line:
+                modifier_rules.add(line)
+                continue
+
+            # 3. 对普通的拦截规则进行域名提取
+            domain = extract_pure_domain(line)
+            if domain:
+                pure_domains.add(domain)
+
+    print(f"✅ 抓取分类完成：白名单 {len(whitelists)} 条，高级规则 {len(modifier_rules)} 条，待精简普通域名 {len(pure_domains)} 条")
+
+    # 4. 仅对普通域名进行父子瘦身
+    print("⏳ 正在执行父子域名深度比对剔除...")
+    optimized_domains = optimize_domains(pure_domains)
+    
+    sorted_whitelists = sorted(whitelists)
+    sorted_modifiers = sorted(modifier_rules)
+    sorted_domains = sorted(optimized_domains)
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    final_count = len(sorted_whitelists) + len(sorted_modifiers) + len(sorted_domains)
+    saved_count = len(pure_domains) - len(optimized_domains)
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        f.write("! Title: Personal Merged AdGuard Rules\n")
+        f.write("! Title: Personal Merged AdGuard Rules (Safe Edition)\n")
         f.write(f"! Last Modified: {now_str}\n")
-        f.write(f"! Total Count: {len(sorted_domains)}\n")
+        f.write(f"! Total Count: {final_count}\n")
         f.write("!\n")
+        
+        # 按优先级输出：白名单 > 高级规则 > 普通规则
+        for w in sorted_whitelists:
+            f.write(f"{w}\n")
+        for m in sorted_modifiers:
+            f.write(f"{m}\n")
         for domain in sorted_domains:
-            f.write(f"||{domain}^\n")
+            clean_domain = domain[2:] if domain.startswith("*.") else domain
+            f.write(f"||{clean_domain}^\n")
 
-    print(f"Generated {len(sorted_domains)} clean rules.")
+    print(f"🎯 瘦身完成！剔除冗余子域名: {saved_count} 条")
+    print(f"📦 最终生成安全规则数: {final_count} 条")
 
 if __name__ == "__main__":
     main()
