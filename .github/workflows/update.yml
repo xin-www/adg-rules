@@ -27,11 +27,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase
           git add rules.txt
-          # 检查是否有内容变更，有变更则提交推送
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "Auto update rules [$(date -u +'%Y-%m-%d %H:%M:%S')]"
-            git push
+            git push origin main
           fi
