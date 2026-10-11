@@ -2,26 +2,26 @@ import re
 import urllib.request
 from datetime import datetime
 
-# 上游规则
 RULE_URLS = [
-    # 1. 基础全能拦截库 (HaGeZi PRO + AdGuard 基础)
+    # 基础全能拦截
     "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
-    # 2.  秋风规则 (国内 App 开屏与跳转打点) 
+    # 国内应用开屏与移动端
     "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/AWAvenue-Ads-Rule.txt",
-    # 3. 封堵国内主流 HTTPDNS 绕过 (blackmatrix7 HTTPDNS 专库)
+    # 封堵 HTTPDNS
     "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/AdGuard/HTTPDNS/HTTPDNS.txt",
-    # 4. AdGuard 防追踪 （错误监控、遥测打点、A/B测试、邮件跟踪）
+    # 防追踪、遥测、报错、社交打点 (Filter 3)
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_3.txt",
-    # 5. 补齐 Cookie 横幅与弹窗通知 (AdGuard 烦人元素)
+    # Cookie横幅、弹窗通知、烦人元素 (Filter 4)
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_4.txt",
 ]
 
 OUTPUT_FILE = "rules.txt"
-DOMAIN_REGEX = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-_]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
-)
 
+# 放宽的域名校验：允许标准域名，也兼容通配符
+DOMAIN_PATTERN = re.compile(
+    r"^(?:\*\.)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-_]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
+)
 
 def fetch_rules(url):
     print(f"Downloading: {url}")
@@ -33,45 +33,46 @@ def fetch_rules(url):
         print(f"Failed to fetch {url}: {e}")
         return []
 
-
-def normalize_line(line):
+def extract_domain(line):
     line = line.strip()
-    if not line or line.startswith(
-        ("!", "#", "[", ";", "/*", "*", "</", "<!", "<html")
-    ):
+    if not line or line.startswith(("!", "#", "[", ";", "/*", "*", "</", "<!", "<html")):
         return None
 
-    # 去除行末注释
+    # 去掉尾部注释
     for sep in [" #", " !"]:
         if sep in line:
             line = line.split(sep)[0].strip()
 
-    # 处理 Adblock 语法: ||example.com^
+    # 去掉 AdGuard 修饰符 (如 $third-party, $image, $popup 等)
+    if "$" in line:
+        line = line.split("$")[0].strip()
+
+    # 处理 Adblock 语法: ||domain^
     if line.startswith("||"):
-        match = re.match(r"^\|\|([a-zA-Z0-9.\-_]+)\^", line)
-        if match:
-            domain = match.group(1).lower()
-            return domain if DOMAIN_REGEX.match(domain) else None
+        # 去掉开头的 ||
+        line = line[2:]
+        # 去掉分隔符及后面的路径 (例如 ||domain.com/path^ 或 ||domain.com^)
+        for delim in ["^", "/", ":"]:
+            if delim in line:
+                line = line.split(delim)[0]
+        domain = line.strip().lower()
+        if DOMAIN_PATTERN.match(domain):
+            return domain
 
-    # 处理 Hosts 语法: 0.0.0.0 example.com
+    # 处理 Hosts 语法: 0.0.0.0 domain.com
     parts = line.split()
-    if len(parts) >= 2 and parts[0] in [
-        "0.0.0.0",
-        "127.0.0.1",
-        "::1",
-        "::",
-        "broadcasthost",
-    ]:
-        domain = parts[1].lower()
-        if domain not in ["localhost", "local", "broadcasthost"]:
-            return domain if DOMAIN_REGEX.match(domain) else None
+    if len(parts) >= 2 and parts[0] in ["0.0.0.0", "127.0.0.1", "::1", "::"]:
+        domain = parts[1].strip().lower()
+        if domain not in ["localhost", "local", "broadcasthost"] and DOMAIN_PATTERN.match(domain):
+            return domain
 
-    # 处理纯域名语法: example.com
-    if len(parts) == 1 and DOMAIN_REGEX.match(parts[0].lower()):
-        return parts[0].lower()
+    # 处理纯域名列表
+    if len(parts) == 1:
+        domain = parts[0].strip().lower()
+        if DOMAIN_PATTERN.match(domain):
+            return domain
 
     return None
-
 
 def main():
     unique_domains = set()
@@ -79,10 +80,11 @@ def main():
     for url in RULE_URLS:
         lines = fetch_rules(url)
         for line in lines:
-            domain = normalize_line(line)
+            domain = extract_domain(line)
             if domain:
                 unique_domains.add(domain)
 
+    # 排序输出标准 AdGuard 语法
     sorted_domains = sorted(unique_domains)
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -94,8 +96,7 @@ def main():
         for domain in sorted_domains:
             f.write(f"||{domain}^\n")
 
-    print(f"Successfully generated {len(sorted_domains)} rules.")
-
+    print(f"Generated {len(sorted_domains)} clean rules.")
 
 if __name__ == "__main__":
     main()
