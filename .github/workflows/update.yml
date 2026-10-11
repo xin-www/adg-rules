@@ -5,7 +5,6 @@ on:
     - cron: '0 20 * * *'
   workflow_dispatch:
 
-
 permissions:
   contents: write
 
@@ -17,7 +16,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-
           fetch-depth: 0
 
       - name: Set up Python
@@ -28,8 +26,12 @@ jobs:
       - name: Run Script
         run: python main.py
 
-      - name: Auto Commit and Push
+      - name: Auto Commit and Push to Rules Branch
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Auto update rules"
           file_pattern: "rules.txt"
+
+          branch: rules
+          create_branch: true
+          push_options: '--force'
