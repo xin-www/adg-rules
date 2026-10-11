@@ -2,48 +2,32 @@ name: Update Merged Rules
 
 on:
   schedule:
-    # 每天 UTC 20:00 (北京时间凌晨 04:00) 自动执行
     - cron: '0 20 * * *'
-  # 允许手动触发
   workflow_dispatch:
+
+# 必须声明写权限
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 完整拉取历史记录 (fetch-depth: 0)，避免浅克隆导致的推送拒绝
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # 2. 安装 Python
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 3. 执行合并清洗脚本
-      - name: Run Merge Script
+      - name: Run Script
         run: python main.py
 
-      # 4. 提交并安全推送
-      - name: Commit and Push
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # 暂存生成的规则文件
-          git add rules.txt
-          
-          # 判断是否有改动
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Auto update rules [$(date -u +'%Y-%m-%d %H:%M:%S')]"
-            # 拉取远程最新提交并变基，避免与网页端改动冲突
-            git pull --rebase origin HEAD
-            # 推送到当前分支
-            git push origin HEAD
-          fi
+      # 使用官方推荐的成熟推送工具，自动处理变基、提交与推送，杜绝冲突报错
+      - name: Push Rules
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto update rules"
+          file_pattern: "rules.txt"
