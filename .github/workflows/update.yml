@@ -1,19 +1,19 @@
-name: Update Merged Rules
+name: Daily Update AdGuard Rules
 
 on:
   schedule:
-    - cron: '0 20 * * *'
+    # 每天 UTC 00:30（北京时间 08:30）
+    - cron: '30 0 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  update:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -21,17 +21,23 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
-      - name: Run Script
+      - name: Generate rules
         run: python main.py
 
-      - name: Auto Commit and Push to Rules Branch
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Auto update rules"
-          file_pattern: "rules.txt"
-
-          branch: rules
-          create_branch: true
-          push_options: '--force'
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          if git diff --quiet rules.txt; then
+            echo "No changes detected."
+          else
+            git add rules.txt
+            git commit -m "chore: update merged AdGuard rules ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            
+            git pull --rebase origin main
+            
+            git push origin main
+          fi
