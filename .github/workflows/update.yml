@@ -1,0 +1,37 @@
+name: Update Merged Rules
+
+on:
+  schedule:
+    # 每天 UTC 20:00 (北京时间凌晨 04:00) 自动执行一次
+    - cron: '0 20 * * *'
+  # 允许在 GitHub 网页上手动点击按钮立即运行
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Merge Script
+        run: python main.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add rules.txt
+          # 检查是否有内容变更，有变更则提交推送
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto update rules [$(date -u +'%Y-%m-%d %H:%M:%S')]"
+            git push
+          fi
