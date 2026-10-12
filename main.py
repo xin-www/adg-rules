@@ -6,7 +6,6 @@ RULE_URLS = [
     "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
     "https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/AWAvenue-Ads-Rule.txt",
-    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/AdGuard/HTTPDNS/HTTPDNS.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_3.txt",
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_4.txt",
 ]
